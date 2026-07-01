@@ -12,7 +12,7 @@ engine = create_async_engine(
 )
 
 # create session factory
-AsyncSessionLocal = AsyncSession(
+AsyncSessionLocal = async_sessionmaker(
     bind = engine,
     class_= AsyncSession,
     expire_on_commit = False,
@@ -21,7 +21,7 @@ AsyncSessionLocal = AsyncSession(
 
 # fastapi dependecy to inject into routes
 async def get_db()->AsyncGenerator[AsyncSession,None]:
-    async with AsyncSessionLocal as session:
+    async with AsyncSessionLocal() as session:
         try:
             yield session
         finally:

@@ -11,6 +11,10 @@ class User(Base,TimestampMixin):
         default = uuid4,
         index = True
     )
+    name: Mapped[str] = mapped_column(
+    String(100),
+    nullable=False
+    )
     email : Mapped[str] = mapped_column(
         String(265),
         unique = True,
