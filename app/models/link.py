@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import String, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base, TimestampMixin
+from sqlalchemy import DateTime
 
 class Link(Base, TimestampMixin):
     __tablename__ = "links"
@@ -35,7 +36,8 @@ class Link(Base, TimestampMixin):
     )
 
     expires_at: Mapped[datetime] = mapped_column(
-        nullable=True
+    DateTime(timezone=True),
+    nullable=True
     )
 
     click_count: Mapped[int] = mapped_column(
