@@ -8,7 +8,7 @@ from app.models.link import Link
 from app.core.redis import get_redis
 from redis.asyncio import Redis
 from loguru import logger
-
+from app.tasks.analytics import increment_click_count
 router = APIRouter(tags=["redirect"])
 
 @router.get("/{slug}")
@@ -17,10 +17,12 @@ async def redirect(
     db: AsyncSession = Depends(get_db),
     redis:Redis = Depends(get_redis)
 ):
-    cached_url = await redis.get(f"slug:{slug}")
-    if cached_url:
+    cached = await redis.get(f"slug:{slug}")
+    if cached:
         logger.info(f"CACHE HIT | slug={slug}")
-        return RedirectResponse(url=cached_url)
+        link_id, original_url = cached.split("|", 1)  # unpack both values
+        increment_click_count.delay(link_id)
+        return RedirectResponse(url=original_url)
     # Cache miss query db
 
     result = await db.execute(
@@ -34,10 +36,9 @@ async def redirect(
     if link.expires_at and link.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Link has expired")
     
-    await redis.set(f"slug:{slug}",str(link.original_url),ex=86400)
+    await redis.set(f"slug:{slug}",f"{link.id}|{str(link.original_url)}",ex=86400)
 
-    link.click_count += 1
-    await db.commit()
+    increment_click_count.delay(str(link.id))
 
-    logger.info(f"CACHE SET | slug={slug} | cached for 24hrs")
+    logger.info(f"CACHE MISS | slug={slug} | querying DB")
     return RedirectResponse(url=str(link.original_url))
