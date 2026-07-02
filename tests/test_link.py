@@ -20,7 +20,7 @@ async def test_create_link_success(client,auth_headers):
     assert data["click_count"]== 0
     assert data["is_active"] == True
 
-async def create_link_custom_slug(client,auth_headers):
+async def test_create_link_custom_slug(client,auth_headers):
     response = client.post("/api/v1/links/",json={
         "original_url":"https://github.com",
         "custome_slug":"myslug",

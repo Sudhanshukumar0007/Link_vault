@@ -2,11 +2,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from app.schemas.link import LinkCreate
-from app.models.user import User
 from app.models.link import Link
 from app.core.utils import generate_slug
 from uuid import UUID
-
+import redis
 
 async def check_slug_in_db(db: AsyncSession, slug: str) -> Link | None:
     result = await db.execute(select(Link).where(Link.slug == slug))
@@ -46,7 +45,7 @@ async def get_user_links(db: AsyncSession, user_id: UUID) -> list[Link]:
     return result.scalars().all()
 
 
-async def delete_link(db: AsyncSession, link_id: UUID, user_id: UUID) -> dict:
+async def delete_link(db: AsyncSession, link_id: UUID, user_id: UUID,redis) -> dict:
     result = await db.execute(
         select(Link).where(Link.id == link_id, Link.user_id == user_id)
     )
@@ -57,7 +56,8 @@ async def delete_link(db: AsyncSession, link_id: UUID, user_id: UUID) -> dict:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Link not found"
         )
-
+    
+    await redis.delete(f"slug:{link.slug}")
     link.is_active = False
     await db.commit()
     return {"message": "Link deleted successfully"}

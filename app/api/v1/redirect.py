@@ -17,13 +17,19 @@ async def redirect(
     db: AsyncSession = Depends(get_db),
     redis:Redis = Depends(get_redis)
 ):
-    cached = await redis.get(f"slug:{slug}")
-    if cached:
-        logger.info(f"CACHE HIT | slug={slug}")
-        link_id, original_url = cached.split("|", 1)  # unpack both values
-        increment_click_count.delay(link_id)
-        return RedirectResponse(url=original_url)
-    # Cache miss query db
+    try:
+        cached = await redis.get(f"slug:{slug}")
+        if cached:
+            logger.info(f"CACHE HIT | slug={slug}")
+            link_id, original_url = cached.split("|", 1)
+            try:
+                increment_click_count.delay(link_id)
+            except:
+                logger.warning(f"Celery unavailable | slug={slug}")
+            return RedirectResponse(url=original_url)
+        # Cache miss query db
+    except Exception:
+        logger.warning(f"Redis unavialable | slug={slug} | failing back to DB")
 
     result = await db.execute(
         select(Link).where(Link.slug == slug, Link.is_active == True)

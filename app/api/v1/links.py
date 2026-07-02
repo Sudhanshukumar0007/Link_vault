@@ -6,6 +6,8 @@ from app.db.session import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.services.link_service import create_link, get_user_links, delete_link
+from app.core.redis import get_redis
+from redis.asyncio import Redis
 
 router = APIRouter(prefix="/links", tags=["links"])
 
@@ -28,6 +30,7 @@ async def get_links_route(
 async def delete_link_route(
     link_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    redis:Redis=Depends(get_redis)
 ):
-    return await delete_link(db, link_id, current_user.id)
+    return await delete_link(db, link_id, current_user.id,redis)
