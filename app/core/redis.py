@@ -1,6 +1,10 @@
+from redis.asyncio import from_url, Redis
 from app.core.config import settings
-from redis.asyncio import from_url,Redis
 
-async def get_redis()->Redis:
-    redis = from_url(settings.REDIS_URL,decode_responses=True)
+async def get_redis() -> Redis:
+    redis = from_url(
+        settings.REDIS_URL,
+        decode_responses=True,
+        ssl_cert_reqs=None  
+    )
     return redis
