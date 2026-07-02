@@ -46,7 +46,7 @@ jobs:
 
       - name: Run tests
         env:
-          DATABASE_URL: postgresql://postgres:password@localhost:5432/linkvault_test
+          DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/linkvault_test
           REDIS_URL: redis://localhost:6379
           SECRET_KEY: testsecretkey123
           DEBUG: true
