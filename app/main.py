@@ -12,14 +12,18 @@ import app.core.redis as redis_module
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize and assign to the variable inside the redis module
-    redis_module.redis_client = from_url(settings.REDIS_URL, decode_responses=True)
-    
-    yield # Let the application run
-    
-    # Best practice: Close the connection gracefully on shutdown
-    if redis_module.redis_client:
-        await redis_module.redis_client.aclose()
+    redis_module.redis_client = from_url(
+        settings.REDIS_URL,
+        decode_responses=True,
+    )
+
+    # Verify the connection
+    await redis_module.redis_client.ping()
+
+    yield
+
+    await redis_module.redis_client.aclose()
+
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -32,7 +36,12 @@ def create_app() -> FastAPI:
 
     Instrumentator().instrument(app).expose(app)
 
-    app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
+    if settings.APP_ENV != "testing":
+        app.add_middleware(
+            RateLimitMiddleware,
+            requests_per_minute=60,
+        )
+
     app.include_router(api_router) 
     app.include_router(redirect_router) 
 

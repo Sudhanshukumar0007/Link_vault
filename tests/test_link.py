@@ -21,9 +21,9 @@ async def test_create_link_success(client,auth_headers):
     assert data["is_active"] == True
 
 async def test_create_link_custom_slug(client,auth_headers):
-    response = client.post("/api/v1/links/",json={
+    response = await client.post("/api/v1/links/",json={
         "original_url":"https://github.com",
-        "custome_slug":"myslug",
+        "custom_slug":"myslug",
         "expires_at":None
         },headers=auth_headers)
     assert response.status_code == 200

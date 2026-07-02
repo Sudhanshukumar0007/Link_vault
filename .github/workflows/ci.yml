@@ -50,5 +50,6 @@ jobs:
           REDIS_URL: redis://localhost:6379
           SECRET_KEY: testsecretkey123
           DEBUG: true
-          APP_ENV: development
+          APP_ENV: test
+          
         run: uv run pytest tests/ -v
