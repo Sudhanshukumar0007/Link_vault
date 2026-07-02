@@ -6,6 +6,9 @@ from app.middleware.rate_limit import RateLimitMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from redis.asyncio import from_url
 from contextlib import asynccontextmanager
+from sqlalchemy import text
+from app.db.session import AsyncSessionLocal
+from app.core.redis import get_redis
 
 # Import the module so you can update its internal state
 import app.core.redis as redis_module
@@ -47,7 +50,30 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     async def health():
-        return {"status": "ok", "version": settings.VERSION}
+        health = {
+            "status": "healthy",
+            "version": settings.VERSION,
+            "database": "healthy",
+            "redis": "healthy",
+        }
+
+        # Database check
+        try:
+            async with AsyncSessionLocal() as session:
+                await session.execute(text("SELECT 1"))
+        except Exception:
+            health["database"] = "unhealthy"
+            health["status"] = "degraded"
+
+        # Redis check
+        try:
+            redis = await get_redis()
+            await redis.ping()
+        except Exception:
+            health["redis"] = "unhealthy"
+            health["status"] = "degraded"
+
+        return health
 
     return app
 

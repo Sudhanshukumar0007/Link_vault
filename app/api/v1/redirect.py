@@ -44,7 +44,10 @@ async def redirect(
     
     await redis.set(f"slug:{slug}",f"{link.id}|{str(link.original_url)}",ex=86400)
 
-    increment_click_count.delay(str(link.id))
+    try:
+        increment_click_count.delay(str(link.id))
+    except Exception:
+        logger.warning("Celery unavailable")
 
     logger.info(f"CACHE MISS | slug={slug} | querying DB")
     return RedirectResponse(url=str(link.original_url))
