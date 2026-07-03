@@ -44,9 +44,18 @@ async def create_link(db: AsyncSession, data: LinkCreate, user_id: UUID) -> Link
     return link
 
 
-async def get_user_links(db: AsyncSession, user_id: UUID) -> list[Link]:
+async def get_user_links(
+    db: AsyncSession,
+    user_id: UUID,
+    limit: int = 10,
+    offset: int = 0
+) -> list[Link]:
     result = await db.execute(
-        select(Link).where(Link.user_id == user_id, Link.is_active == True)
+        select(Link)
+        .where(Link.user_id == user_id, Link.is_active == True)
+        .order_by(Link.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     return result.scalars().all()
 

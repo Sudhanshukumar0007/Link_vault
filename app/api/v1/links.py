@@ -21,11 +21,12 @@ async def create_link_route(
 
 @router.get("/", response_model=list[LinkResponse])
 async def get_links_route(
+    limit: int = 10,
+    offset: int = 0,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    return await get_user_links(db, current_user.id)
-
+    return await get_user_links(db, current_user.id, limit, offset)
 @router.delete("/{link_id}")
 async def delete_link_route(
     link_id: UUID,
