@@ -6,6 +6,7 @@ from app.models.link import Link
 from app.core.utils import generate_slug
 from uuid import UUID
 import redis
+from app.core.utils import RESERVED_SLUGS
 
 async def check_slug_in_db(db: AsyncSession, slug: str) -> Link | None:
     result = await db.execute(select(Link).where(Link.slug == slug))
@@ -20,10 +21,15 @@ async def create_link(db: AsyncSession, data: LinkCreate, user_id: UUID) -> Link
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Slug already taken, choose a different one"
             )
+        if data.custom_slug in RESERVED_SLUGS:
+             raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="this slug is Reserved, choose a different one"
+            )
         slug = data.custom_slug
     else:
         slug = generate_slug()
-        while await check_slug_in_db(db, slug):
+        while slug in RESERVED_SLUGS or await check_slug_in_db(db, slug):
             slug = generate_slug()
 
     link = Link(

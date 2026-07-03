@@ -38,6 +38,7 @@ async def test_login_success(client):
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
+    assert "refresh_token" in data  # add this
     assert data["token_type"] == "bearer"
 
 async def test_login_wrong_password(client):
@@ -56,3 +57,27 @@ async def test_login_nonexistent_user(client):
         data={"username": "nobody@test.com", "password": "testpass123"}
     )
     assert response.status_code == 401
+async def test_refresh_token(client):
+    await client.post("/api/v1/auth/register", json={
+        "name": "Refresh User",
+        "email": "refresh@test.com",
+        "password": "testpass123"
+    })
+    login = await client.post("/api/v1/auth/login",
+        data={"username": "refresh@test.com", "password": "testpass123"}
+    )
+    refresh_token = login.json()["refresh_token"]
+
+    response = await client.post("/api/v1/auth/refresh", json={
+        "refresh_token": refresh_token
+    })
+    assert response.status_code == 200
+    assert "access_token" in response.json()
+    assert "refresh_token" in response.json()
+
+async def test_me_endpoint(client, auth_headers):
+    response = await client.get("/api/v1/auth/me", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["email"] == "auth@example.com"
+    assert "hashed_password" not in data

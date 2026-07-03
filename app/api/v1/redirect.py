@@ -9,6 +9,7 @@ from app.core.redis import get_redis
 from redis.asyncio import Redis
 from loguru import logger
 from app.tasks.analytics import increment_click_count
+from app.core.utils import RESERVED_SLUGS
 router = APIRouter(tags=["redirect"])
 
 @router.get("/{slug}")
@@ -17,6 +18,8 @@ async def redirect(
     db: AsyncSession = Depends(get_db),
     redis:Redis = Depends(get_redis)
 ):
+    if slug in RESERVED_SLUGS:
+            raise HTTPException(status_code=404, detail="Not found")
     try:
         cached = await redis.get(f"slug:{slug}")
         if cached:

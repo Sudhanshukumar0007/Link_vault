@@ -46,8 +46,6 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(api_router) 
-    app.include_router(redirect_router) 
-
     @app.get("/health")
     async def health():
         health = {
@@ -74,6 +72,8 @@ def create_app() -> FastAPI:
             health["status"] = "degraded"
 
         return health
+    app.include_router(redirect_router) 
+
 
     return app
 
