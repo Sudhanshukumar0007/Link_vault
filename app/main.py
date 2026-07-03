@@ -34,7 +34,8 @@ def create_app() -> FastAPI:
         version=settings.VERSION,
         debug=settings.DEBUG,
         lifespan=lifespan,
-        docs_url="/docs" if settings.DEBUG else None,
+        docs_url="/docs",      
+        redoc_url="/redoc",
     )
 
     Instrumentator().instrument(app).expose(app)

@@ -30,8 +30,8 @@ LinkVault is a FastAPI URL shortener API built as a production-readiness learnin
 ## Project Status
 
 Implemented: core auth, link CRUD, redirects, Redis cache-aside, Celery click counter, migrations, tests, Docker support, CI skeleton.
-
-Demo: https://link-vault-zbon.onrender.com/redoc
+>  Swagger UI is enabled for demo purposes. In a real production deployment this would be disabled.
+Demo: https://link-vault-zbon.onrender.com/docs
 
 
 ## Setup
