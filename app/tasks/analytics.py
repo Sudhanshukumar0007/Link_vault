@@ -1,20 +1,37 @@
 from app.tasks.celery_app import celery_app
 from app.db.session import SyncSessionLocal
-from app.models.user import User  # import User so SQLAlchemy knows about users table
 from app.models.link import Link
-from sqlalchemy import select
+from app.models.click import Click
+from sqlalchemy import select, update
 from loguru import logger
 from uuid import UUID
-from sqlalchemy import update
-
+from datetime import datetime, timezone
+import hashlib
+from app.models.user import User 
+from user_agents import parse as parse_ua
 
 @celery_app.task
-def increment_click_count(link_id: str):
+def record_click(link_id: str, ip: str, user_agent: str, referrer: str):
     with SyncSessionLocal() as db:
+        # parse user agent
+        ua = parse_ua(user_agent)
+        device_type = "mobile" if ua.is_mobile else "tablet" if ua.is_tablet else "desktop"
+        browser = ua.browser.family
+
+        click = Click(
+            link_id=UUID(link_id),
+            clicked_at=datetime.now(timezone.utc),
+            ip_hash=hashlib.sha256(ip.encode()).hexdigest()[:16],
+            referrer=referrer[:500] if referrer else None,
+            device_type=device_type,
+            browser=browser,
+        )
+        db.add(click)
+
         db.execute(
             update(Link)
-            .where(Link.id==UUID(link_id))
-            .values(click_count=Link.click_count+1)
+            .where(Link.id == UUID(link_id))
+            .values(click_count=Link.click_count + 1)
         )
         db.commit()
-        logger.info(f"click counted | link_id={link_id}")
+        logger.info(f"Click recorded | link_id={link_id} | device={device_type} | browser={browser}")

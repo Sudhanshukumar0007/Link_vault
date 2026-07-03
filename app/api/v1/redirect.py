@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status,Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,13 +8,14 @@ from app.models.link import Link
 from app.core.redis import get_redis
 from redis.asyncio import Redis
 from loguru import logger
-from app.tasks.analytics import increment_click_count
 from app.core.utils import RESERVED_SLUGS
+from app.tasks.analytics import record_click
 router = APIRouter(tags=["redirect"])
 
 @router.get("/{slug}")
 async def redirect(
     slug: str,
+    request:Request,
     db: AsyncSession = Depends(get_db),
     redis:Redis = Depends(get_redis)
 ):
@@ -26,7 +27,13 @@ async def redirect(
             logger.info(f"CACHE HIT | slug={slug}")
             link_id, original_url = cached.split("|", 1)
             try:
-                increment_click_count.delay(link_id)
+                
+                record_click.delay(
+                    link_id,
+                    request.client.host,
+                    request.headers.get("user-agent", ""),
+                    request.headers.get("referer", "")
+                )
             except:
                 logger.warning(f"Celery unavailable | slug={slug}")
             return RedirectResponse(url=original_url)
@@ -48,7 +55,12 @@ async def redirect(
     await redis.set(f"slug:{slug}",f"{link.id}|{str(link.original_url)}",ex=86400)
 
     try:
-        increment_click_count.delay(str(link.id))
+            record_click.delay(
+                str(link.id),
+                request.client.host,
+                request.headers.get("user-agent", ""),
+                request.headers.get("referer", "")
+            )
     except Exception:
         logger.warning("Celery unavailable")
 
