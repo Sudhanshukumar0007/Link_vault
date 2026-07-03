@@ -2,8 +2,6 @@
 
 LinkVault is a FastAPI URL shortener API built as a production-readiness learning project. It covers the core backend pieces of a modern short-link service: JWT auth, refresh tokens, link management, public redirects, Redis caching, Celery-based click tracking, PostgreSQL persistence, Alembic migrations, Prometheus metrics, Docker support, CI, and Render deployment configuration.
 
-This project is currently a portfolio/demo backend, not a finished production service. The codebase intentionally keeps known limitations visible while they are being fixed.
-
 ## Tech Stack
 
 - FastAPI
@@ -69,18 +67,6 @@ Implemented:
 - Prometheus metrics
 - Docker/Render deployment setup
 - Basic automated tests
-
-Still in progress:
-
-- Redis/Celery outage hardening
-- Expiry-aware redirect cache TTL
-- Migration safety for existing production data
-- Stronger test isolation
-- Password-protected links
-- API keys
-- Workspaces and RBAC
-- Structured JSON logging with request IDs
-
 Swagger UI is enabled for demo purposes. In a stricter production deployment, `/docs` and `/redoc` should usually be disabled or protected.
 
 Demo: https://link-vault-zbon.onrender.com/docs
@@ -184,34 +170,3 @@ A future improvement is to add API and Celery worker services to Compose.
 - `DEBUG=false`
 
 The Docker command runs Alembic migrations before starting Uvicorn.
-
-## Known Limitations
-
-- Redis is still too tightly coupled to startup and some request paths.
-- Redirect cache writes and delete cache invalidation need stronger failure handling.
-- Expired links need cache TTLs based on their actual expiration time.
-- Refresh-token rotation needs stronger concurrency protection.
-- Test setup still depends on real PostgreSQL and Redis.
-- Tests currently use `Base.metadata.create_all`, so migration correctness needs separate verification.
-- Compose does not yet run the API or Celery worker.
-- Workspace/team support is intentionally deferred.
-
-## Roadmap
-
-Short-term priorities:
-
-- Make Redis non-fatal for startup, redirects, deletes, and rate limiting.
-- Add expiry-aware Redis TTL for redirects.
-- Repair unsafe migrations before using them on existing production data.
-- Improve test isolation and add Redis/Celery failure tests.
-- Add password-protected links.
-- Add API request/response examples to the README.
-
-Long-term priorities:
-
-- Workspaces and RBAC.
-- API keys.
-- Structured JSON logging with request IDs.
-- Full Docker Compose stack with API and worker services.
-- Stronger analytics aggregation.
-- Complete CI/CD pipeline.
