@@ -3,12 +3,12 @@ import string
 
 RESERVED_SLUGS = {
     "health",
-    "metrcs",
+    "metrics",
     "docs",
-    "redocs",
+    "redoc",
     "openapi.json",
     "api",
-    "fevicon.ico",
+    "favicon.ico",
 }
 
 def generate_slug(length:int = 6) -> str:
