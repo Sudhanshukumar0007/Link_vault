@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends,Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from datetime import datetime, timezone, timedelta
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 @router.get("/links/{link_id}/stats")
 async def link_stats(
     link_id: UUID,
-    period: int = 7,  # days
+    period: int = Query(default=7, ge=1, le=90),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -88,7 +88,7 @@ async def link_stats(
 
 @router.get("/top-links")
 async def top_links(
-    limit: int = 10,
+    limit: int = Query(default=10, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):

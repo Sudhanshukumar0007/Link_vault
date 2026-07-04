@@ -49,10 +49,19 @@ async def redirect(
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
 
-    if link.expires_at and link.expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Link has expired")
-    
-    await redis.set(f"slug:{slug}",f"{link.id}|{str(link.original_url)}",ex=86400)
+    # calculate TTL
+    if link.expires_at:
+        seconds_until_expiry = int((link.expires_at - datetime.now(timezone.utc)).total_seconds())
+        if seconds_until_expiry <= 0:
+            raise HTTPException(status_code=410, detail="Link has expired")
+        ttl = min(86400, seconds_until_expiry)
+    else:
+        ttl = 86400
+
+    try:
+        await redis.set(f"slug:{slug}", f"{link.id}|{str(link.original_url)}", ex=ttl)
+    except Exception:
+        logger.warning(f"Redis cache set failed | slug={slug}")
 
     try:
             record_click.delay(

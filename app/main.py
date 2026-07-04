@@ -11,16 +11,23 @@ from sqlalchemy import text
 from app.db.session import AsyncSessionLocal
 from app.core.redis import get_redis
 import app.core.redis as redis_module
+from loguru import logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    redis_module.redis_client = from_url(
-        settings.REDIS_URL,
-        decode_responses=True,
-    )
-    await redis_module.redis_client.ping()
+    try:
+        redis_module.redis_client = from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+        )
+        await redis_module.redis_client.ping()
+        logger.info("Redis connected")
+    except Exception:
+        logger.warning("Redis unavailable at startup - cache disabled")
     yield
-    await redis_module.redis_client.aclose()
+
+    if redis_module.redis_client:
+        await redis_module.redis_client.aclose()
 
 
 def create_app() -> FastAPI:
@@ -36,7 +43,7 @@ def create_app() -> FastAPI:
     Instrumentator().instrument(app).expose(app)
     app.add_middleware(LoggingMiddleware)
 
-    if settings.APP_ENV != "testing":
+    if settings.APP_ENV != "test":
         app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
 
     app.include_router(api_router)

@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings,SettingsConfigDict
 
 class Settings(BaseSettings):
-    APP_ENV:str = "developement"
+    APP_ENV:str = "development"
     DEBUG:bool = True
     APP_NAME:str = "LinkVault"
     VERSION:str = "0.1.0"

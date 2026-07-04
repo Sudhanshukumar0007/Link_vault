@@ -7,6 +7,7 @@ from app.core.utils import generate_slug
 from uuid import UUID
 import redis
 from app.core.utils import RESERVED_SLUGS
+from loguru import logger
 
 async def check_slug_in_db(db: AsyncSession, slug: str) -> Link | None:
     result = await db.execute(select(Link).where(Link.slug == slug))
@@ -71,8 +72,11 @@ async def delete_link(db: AsyncSession, link_id: UUID, user_id: UUID,redis) -> d
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Link not found"
         )
-    
-    await redis.delete(f"slug:{link.slug}")
     link.is_active = False
     await db.commit()
+    
+    try:
+        await redis.delete(f"slug:{link.slug}")
+    except Exception:
+        logger.warning(f"Cache invalidation failed | slug={link.slug}")
     return {"message": "Link deleted successfully"}

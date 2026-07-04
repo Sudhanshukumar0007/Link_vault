@@ -12,14 +12,19 @@ from user_agents import parse as parse_ua
 
 @celery_app.task
 def record_click(link_id: str, ip: str, user_agent: str, referrer: str):
+    try:
+        link_uuid = UUID(link_id)
+    except ValueError:
+        logger.error(f"Invalid link_id in record_click task: {link_id}")
+        return
+
     with SyncSessionLocal() as db:
-        # parse user agent
         ua = parse_ua(user_agent)
         device_type = "mobile" if ua.is_mobile else "tablet" if ua.is_tablet else "desktop"
         browser = ua.browser.family
 
         click = Click(
-            link_id=UUID(link_id),
+            link_id=link_uuid,
             clicked_at=datetime.now(timezone.utc),
             ip_hash=hashlib.sha256(ip.encode()).hexdigest()[:16],
             referrer=referrer[:500] if referrer else None,
@@ -27,10 +32,9 @@ def record_click(link_id: str, ip: str, user_agent: str, referrer: str):
             browser=browser,
         )
         db.add(click)
-
         db.execute(
             update(Link)
-            .where(Link.id == UUID(link_id))
+            .where(Link.id == link_uuid)
             .values(click_count=Link.click_count + 1)
         )
         db.commit()
