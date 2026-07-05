@@ -12,6 +12,7 @@ from app.models.user import User
 from app.models.link import Link
 from app.models.click import Click
 from app.models.refresh_token import RefreshToken
+from app.models.workspace import Workspace, WorkspaceMember
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

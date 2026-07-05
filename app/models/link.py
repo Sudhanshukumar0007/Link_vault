@@ -43,3 +43,8 @@ class Link(Base, TimestampMixin):
     click_count: Mapped[int] = mapped_column(
         default=0
     )
+
+    workspace_id: Mapped[UUID] = mapped_column(
+    ForeignKey("workspaces.id"),
+    nullable=True  # nullable because links can be personal OR workspace
+    )

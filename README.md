@@ -1,172 +1,246 @@
 # LinkVault
 
-LinkVault is a FastAPI URL shortener API built as a production-readiness learning project. It covers the core backend pieces of a modern short-link service: JWT auth, refresh tokens, link management, public redirects, Redis caching, Celery-based click tracking, PostgreSQL persistence, Alembic migrations, Prometheus metrics, Docker support, CI, and Render deployment configuration.
+A URL shortener API built with FastAPI. Create short links, track click analytics, and manage team workspaces.
+
+---
+
+## Features
+
+- **Link shortening** — Generate short slugs automatically or provide a custom one
+- **Link expiry** — Set an optional expiry date/time on any link
+- **Click tracking** — Every redirect is recorded asynchronously with device type, browser, and referrer
+- **Analytics** — Per-link stats (daily clicks, device breakdown, browser breakdown, top referrers) over a configurable time window
+- **Top links** — Ranked list of your most-clicked active links
+- **Workspaces** — Create team workspaces, invite members by email, assign roles, remove members
+- **JWT authentication** — Short-lived access tokens (15 min) with rotating refresh tokens (7 days)
+- **Redis caching** — Redirect hot path served from Redis cache with automatic TTL
+- **Rate limiting** — Per-IP request rate limiting with graceful Redis-failure fallback
+- **Prometheus metrics** — Instrumented via `prometheus-fastapi-instrumentator`, scraped at `/metrics`
+- **Health check** — `/health` endpoint reporting database and cache status
+- **Structured logging** — Request/response logging with request IDs and durations via Loguru
+
+---
 
 ## Tech Stack
 
-- FastAPI
-- PostgreSQL
-- SQLAlchemy async
-- Alembic
-- Redis
-- Celery
-- Pydantic v2
-- Prometheus FastAPI Instrumentator
-- Docker / Docker Compose
-- GitHub Actions
-- Render deployment config
+| Layer | Technology |
+|---|---|
+| API framework | FastAPI (async) |
+| Database | PostgreSQL 16 via asyncpg |
+| ORM | SQLAlchemy 2.0 (async) |
+| Cache | Redis 7 |
+| Background tasks | Celery (Redis broker) |
+| Migrations | Alembic |
+| Auth | JWT (HS256) — python-jose |
+| Password hashing | bcrypt via passlib |
+| Runtime | Python 3.14, Uvicorn |
+| Package manager | uv |
+| Monitoring | Prometheus + Grafana |
+| Logging | Loguru |
 
-## Current Features
+---
 
-### Auth
+## API Endpoints
 
-- `POST /api/v1/auth/register` - create a user
-- `POST /api/v1/auth/login` - login with email/password
-- `POST /api/v1/auth/refresh` - rotate a refresh token and issue a new access token
-- `GET /api/v1/auth/me` - return the authenticated user profile
+### Auth — `/api/v1/auth`
 
-### Links
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/auth/register` | Create a new account |
+| `POST` | `/auth/login` | Login with email + password, returns access and refresh tokens |
+| `POST` | `/auth/refresh` | Exchange a refresh token for a new token pair |
+| `GET` | `/auth/me` | Get the current authenticated user's profile |
 
-- `POST /api/v1/links/` - create a short link
-- `GET /api/v1/links/?limit=10&offset=0` - list the current user's active links
-- `DELETE /api/v1/links/{link_id}` - soft-delete a link owned by the current user
-- Custom slug validation with length and character checks
-- Reserved slug protection for application routes
+### Links — `/api/v1/links`
 
-### Redirects And Analytics
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/links/` | Create a shortened link (optional custom slug, optional expiry) |
+| `GET` | `/links/` | List your links (paginated with `limit` and `offset`) |
+| `DELETE` | `/links/{link_id}` | Soft-delete a link (deactivates it, preserves history) |
 
-- `GET /{slug}` - redirect to the original URL
-- Redis cache-aside lookup for redirects
-- Celery task for click recording
-- Atomic click-count increments
-- Click analytics table with device, browser, referrer, and timestamp data
-- `GET /api/v1/analytics/links/{link_id}/stats` - per-link analytics
-- `GET /api/v1/analytics/top-links` - top links for the authenticated user
+### Redirect
 
-### Operations
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/{slug}` | Redirect to the original URL; returns 410 if expired, 404 if not found |
 
-- `GET /health` - app, database, and Redis health response
-- `/metrics` - Prometheus metrics endpoint
-- Alembic migrations
-- Dockerfile for deployment
-- Docker Compose for local dependencies
-- GitHub Actions CI skeleton
-- Render deployment config
+### Analytics — `/api/v1/analytics`
 
-## Project Status
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/analytics/links/{link_id}/stats` | Daily click chart, device, browser, and referrer breakdown for a link |
+| `GET` | `/analytics/top-links` | Your top links ranked by total click count |
 
-Implemented:
+Query parameters for `/stats`:
+- `period` — Number of days to look back, 1–90 (default: 7)
 
-- Core auth with access and refresh tokens
-- Authenticated link CRUD
-- Public redirects
-- Redis redirect caching
-- Celery click tracking
-- Basic analytics API
-- PostgreSQL models and Alembic migrations
-- Prometheus metrics
-- Docker/Render deployment setup
-- Basic automated tests
-Swagger UI is enabled for demo purposes. In a stricter production deployment, `/docs` and `/redoc` should usually be disabled or protected.
+Query parameters for `/top-links`:
+- `limit` — Number of results, 1–50 (default: 10)
 
-Demo: https://link-vault-zbon.onrender.com/docs
+### Workspaces — `/api/v1/workspaces`
 
-## Setup
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/workspaces/` | Create a new workspace |
+| `GET` | `/workspaces/` | List workspaces you own or are a member of |
+| `GET` | `/workspaces/{workspace_id}` | Get a single workspace |
+| `POST` | `/workspaces/{workspace_id}/members` | Invite a user to the workspace by email |
+| `DELETE` | `/workspaces/{workspace_id}/members/{user_id}` | Remove a member from the workspace |
+| `GET` | `/workspaces/{workspace_id}/members` | List workspace members (paginated) |
 
-Create a `.env` file from the example:
+### System
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Returns database and cache status |
+| `GET` | `/metrics` | Prometheus metrics endpoint |
+| `GET` | `/docs` | Interactive Swagger UI (when DEBUG=true) |
+| `GET` | `/redoc` | ReDoc API documentation |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.14+
+- PostgreSQL 16
+- Redis 7
+- [uv](https://docs.astral.sh/uv/) package manager
+
+### Local Setup
+
+1. **Clone the repository**
+
+   ```bash
+   git clone https://github.com/Sudhanshukumar0007/Link_vault.git
+   cd Link_vault
+   ```
+
+2. **Copy and configure environment variables**
+
+   ```bash
+   cp .env.example .env
+   # Edit .env with your database URL, Redis URL, and a strong SECRET_KEY
+   ```
+
+   Required variables:
+
+   | Variable | Example |
+   |----------|---------|
+   | `DATABASE_URL` | `postgresql+asyncpg://user:pass@localhost:5432/linkvault` |
+   | `REDIS_URL` | `redis://localhost:6379` |
+   | `SECRET_KEY` | 32+ character random string |
+   | `ALGORITHM` | `HS256` |
+   | `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` |
+   | `REFRESH_TOKEN_EXPIRE_DAYS` | `7` |
+   | `APP_ENV` | `development` |
+   | `DEBUG` | `true` |
+
+3. **Install dependencies**
+
+   ```bash
+   uv sync
+   ```
+
+4. **Run database migrations**
+
+   ```bash
+   uv run alembic upgrade head
+   ```
+
+5. **Start the API server**
+
+   ```bash
+   uv run uvicorn app.main:app --reload
+   ```
+
+6. **Start the Celery worker** (required for click analytics)
+
+   ```bash
+   uv run celery -A app.tasks.celery_app worker --loglevel=info
+   ```
+
+The API will be available at `http://localhost:8000`.
+Interactive docs at `http://localhost:8000/docs`.
+
+---
+
+## Docker Compose
+
+To start PostgreSQL, Redis, Prometheus, and Grafana locally:
 
 ```bash
-cp .env.example .env
+docker compose up -d
 ```
 
-Install dependencies:
+Services:
+
+| Service | Port |
+|---------|------|
+| PostgreSQL | 5432 |
+| Redis | 6379 |
+| Prometheus | 9090 |
+| Grafana | 3000 (admin / admin) |
+
+---
+
+## Running Tests
 
 ```bash
-uv sync
-```
-
-Start required services:
-
-```bash
-docker compose up -d postgres redis
-```
-
-Run migrations:
-
-```bash
-uv run alembic upgrade head
-```
-
-Start the API:
-
-```bash
-uv run uvicorn app.main:app --reload
-```
-
-The API runs at:
-
-```text
-http://localhost:8000
-```
-
-## Environment Variables
-
-Required variables:
-
-```env
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/linkvault
-REDIS_URL=redis://localhost:6379
-SECRET_KEY=your-secret-key-here
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=15
-REFRESH_TOKEN_EXPIRE_DAYS=7
-APP_ENV=development
-DEBUG=true
-```
-
-## Testing And Quality Checks
-
-Expected local checks:
-
-```bash
-uv run ruff check .
-uv run mypy app
 uv run pytest tests/ -v
 ```
 
-The current tests expect PostgreSQL and Redis to be available locally. The test database URL in `tests/conftest.py` is:
+Tests use a dedicated test database and run with real PostgreSQL and Redis. Ensure both are running before executing the suite.
 
-```text
-postgresql+asyncpg://postgres:password@localhost:5432/linkvault_test
+---
+
+## Project Structure
+
+```
+app/
+├── api/
+│   └── v1/
+│       ├── auth.py          # Auth routes
+│       ├── links.py         # Link CRUD routes
+│       ├── redirect.py      # Redirect handler
+│       ├── analytics.py     # Analytics routes
+│       └── workspaces.py    # Workspace routes
+├── core/
+│   ├── config.py            # Settings (pydantic-settings)
+│   ├── redis.py             # Redis client
+│   ├── security.py          # JWT and password hashing
+│   └── utils.py             # Slug generation, reserved slugs
+├── db/
+│   └── session.py           # Async SQLAlchemy session
+├── middleware/
+│   ├── logging.py           # Request/response logging
+│   └── rate_limit.py        # IP-based rate limiting
+├── models/                  # SQLAlchemy ORM models
+├── schemas/                 # Pydantic request/response schemas
+├── services/                # Business logic layer
+├── tasks/
+│   ├── celery_app.py        # Celery app config
+│   └── analytics.py        # Click recording task
+└── main.py                  # App factory and lifespan
+alembic/
+└── versions/                # Database migrations
+monitoring/
+└── prometheus.yml           # Prometheus scrape config
+tests/                       # Pytest async test suite
 ```
 
-If developing from WSL, run `uv` and the test commands from WSL. Do not share the same `.venv` between Windows PowerShell and WSL.
-
-## Docker
-
-The current `docker-compose.yml` starts supporting services:
-
-- PostgreSQL on `5432`
-- Redis on `6379`
-- Prometheus on `9090`
-- Grafana on `3000`
-
-The API is started manually with:
-
-```bash
-uv run uvicorn app.main:app --reload
-```
-
-A future improvement is to add API and Celery worker services to Compose.
+---
 
 ## Deployment
 
-`render.yaml` configures a Docker-based Render web service. Required Render environment variables:
+The project includes a `render.yaml` for one-click deployment to [Render](https://render.com) and a `Dockerfile` for container-based deployments.
 
-- `DATABASE_URL`
-- `REDIS_URL`
-- `SECRET_KEY`
-- `APP_ENV=production`
-- `DEBUG=false`
+Environment variables `DATABASE_URL`, `REDIS_URL`, and `SECRET_KEY` must be set in the deployment environment. `APP_ENV` should be set to `production` and `DEBUG` to `false`.
 
-The Docker command runs Alembic migrations before starting Uvicorn.
+---
+
+## License
+
+MIT
