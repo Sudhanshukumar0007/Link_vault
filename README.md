@@ -1,23 +1,18 @@
-# LinkVault
+# LinkVault 🔗
 
-A URL shortener API built with FastAPI. Create short links, track click analytics, and manage team workspaces.
+A production-grade URL shortener and analytics API built with FastAPI. Built as a learning project to cover every layer of real backend engineering — from async database sessions to Redis caching, Celery background tasks, CI/CD pipelines, and observability dashboards.
+
+**Live API:** https://link-vault-zbon.onrender.com/docs
 
 ---
 
-## Features
+## What it does
 
-- **Link shortening** — Generate short slugs automatically or provide a custom one
-- **Link expiry** — Set an optional expiry date/time on any link
-- **Click tracking** — Every redirect is recorded asynchronously with device type, browser, and referrer
-- **Analytics** — Per-link stats (daily clicks, device breakdown, browser breakdown, top referrers) over a configurable time window
-- **Top links** — Ranked list of your most-clicked active links
-- **Workspaces** — Create team workspaces, invite members by email, assign roles, remove members
-- **JWT authentication** — Short-lived access tokens (15 min) with rotating refresh tokens (7 days)
-- **Redis caching** — Redirect hot path served from Redis cache with automatic TTL
-- **Rate limiting** — Per-IP request rate limiting with graceful Redis-failure fallback
-- **Prometheus metrics** — Instrumented via `prometheus-fastapi-instrumentator`, scraped at `/metrics`
-- **Health check** — `/health` endpoint reporting database and cache status
-- **Structured logging** — Request/response logging with request IDs and durations via Loguru
+- Shorten any URL to a custom or auto-generated slug
+- Redirect users via sub-100ms cached redirects
+- Track every click with device, browser, and referrer analytics
+- Manage links in personal or team workspaces
+- Authenticate with JWT access + refresh token rotation
 
 ---
 
@@ -25,222 +20,211 @@ A URL shortener API built with FastAPI. Create short links, track click analytic
 
 | Layer | Technology |
 |---|---|
-| API framework | FastAPI (async) |
-| Database | PostgreSQL 16 via asyncpg |
-| ORM | SQLAlchemy 2.0 (async) |
-| Cache | Redis 7 |
-| Background tasks | Celery (Redis broker) |
+| Framework | FastAPI (async) |
+| Database | PostgreSQL + SQLAlchemy 2.x (async) |
 | Migrations | Alembic |
-| Auth | JWT (HS256) — python-jose |
-| Password hashing | bcrypt via passlib |
-| Runtime | Python 3.14, Uvicorn |
-| Package manager | uv |
-| Monitoring | Prometheus + Grafana |
-| Logging | Loguru |
+| Cache | Redis (cache-aside pattern) |
+| Task Queue | Celery + Redis broker |
+| Auth | JWT (HS256) + bcrypt + refresh token rotation |
+| Observability | Prometheus + Grafana |
+| Logging | Loguru (structured JSON with request IDs) |
+| Testing | pytest + pytest-asyncio + httpx |
+| CI/CD | GitHub Actions → Render (deploy after CI pass) |
+| Containerization | Docker + Docker Compose |
+
+---
+
+## Architecture
+
+```
+Client
+  │
+  ▼
+FastAPI (Uvicorn)
+  │         │
+  │         ▼
+  │       Redis
+  │       ├── Cache-aside for redirects (slug → URL)
+  │       ├── Rate limiting (sliding window)
+  │       └── Celery broker
+  │
+  ▼
+PostgreSQL
+  ├── users
+  ├── links
+  ├── clicks (analytics events)
+  ├── workspaces + workspace_members
+  └── refresh_tokens
+  
+Celery Worker
+  └── record_click task (async analytics)
+  
+Prometheus + Grafana
+  └── RED metrics dashboard (Rate, Errors, Duration)
+```
 
 ---
 
 ## API Endpoints
 
-### Auth — `/api/v1/auth`
+### Auth
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/v1/auth/register` | Register with name, email, password |
+| POST | `/api/v1/auth/login` | Login → access + refresh tokens |
+| POST | `/api/v1/auth/refresh` | Rotate refresh token |
+| GET | `/api/v1/auth/me` | Current user profile |
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/auth/register` | Create a new account |
-| `POST` | `/auth/login` | Login with email + password, returns access and refresh tokens |
-| `POST` | `/auth/refresh` | Exchange a refresh token for a new token pair |
-| `GET` | `/auth/me` | Get the current authenticated user's profile |
-
-### Links — `/api/v1/links`
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/links/` | Create a shortened link (optional custom slug, optional expiry) |
-| `GET` | `/links/` | List your links (paginated with `limit` and `offset`) |
-| `DELETE` | `/links/{link_id}` | Soft-delete a link (deactivates it, preserves history) |
+### Links
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/v1/links/` | Create short link (optional custom slug, expiry) |
+| GET | `/api/v1/links/` | List user's links (paginated) |
+| DELETE | `/api/v1/links/{id}` | Soft delete + cache invalidation |
 
 ### Redirect
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/{slug}` | Redirect → fires async click tracking |
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/{slug}` | Redirect to the original URL; returns 410 if expired, 404 if not found |
+### Analytics
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/v1/analytics/links/{id}/stats` | Daily clicks, devices, browsers, referrers |
+| GET | `/api/v1/analytics/top-links` | Most clicked links |
 
-### Analytics — `/api/v1/analytics`
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/analytics/links/{link_id}/stats` | Daily click chart, device, browser, and referrer breakdown for a link |
-| `GET` | `/analytics/top-links` | Your top links ranked by total click count |
-
-Query parameters for `/stats`:
-- `period` — Number of days to look back, 1–90 (default: 7)
-
-Query parameters for `/top-links`:
-- `limit` — Number of results, 1–50 (default: 10)
-
-### Workspaces — `/api/v1/workspaces`
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/workspaces/` | Create a new workspace |
-| `GET` | `/workspaces/` | List workspaces you own or are a member of |
-| `GET` | `/workspaces/{workspace_id}` | Get a single workspace |
-| `POST` | `/workspaces/{workspace_id}/members` | Invite a user to the workspace by email |
-| `DELETE` | `/workspaces/{workspace_id}/members/{user_id}` | Remove a member from the workspace |
-| `GET` | `/workspaces/{workspace_id}/members` | List workspace members (paginated) |
-
-### System
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Returns database and cache status |
-| `GET` | `/metrics` | Prometheus metrics endpoint |
-| `GET` | `/docs` | Interactive Swagger UI (when DEBUG=true) |
-| `GET` | `/redoc` | ReDoc API documentation |
+### Workspaces
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/v1/workspaces/` | Create workspace |
+| GET | `/api/v1/workspaces/` | List user's workspaces |
+| GET | `/api/v1/workspaces/{id}` | Get workspace |
+| POST | `/api/v1/workspaces/{id}/members` | Invite member (owner only) |
+| GET | `/api/v1/workspaces/{id}/members` | List members with user info |
+| DELETE | `/api/v1/workspaces/{id}/members/{user_id}` | Remove member |
 
 ---
 
-## Getting Started
+## Key Engineering Decisions
 
-### Prerequisites
+### Cache-aside on redirects
+Every redirect checks Redis first. On cache miss, DB is queried and result cached for 24h (or until link expiry). On cache hit, response is immediate with no DB query. Redis failure falls back to DB gracefully.
 
-- Python 3.14+
-- PostgreSQL 16
-- Redis 7
-- [uv](https://docs.astral.sh/uv/) package manager
+### Fire-and-forget click tracking
+Redirects return immediately. Click recording (DB write + user-agent parse) happens in a Celery background task. Users never wait for analytics.
 
-### Local Setup
+### Refresh token rotation
+Every `/refresh` call atomically revokes the old token and issues a new pair. Concurrent refresh calls are handled safely — only one wins at the DB level.
 
-1. **Clone the repository**
+### Sliding window rate limiting
+Redis sorted sets track request timestamps per IP. Old entries are pruned atomically on each request. Fails open (allows request) if Redis is down.
 
-   ```bash
-   git clone https://github.com/Sudhanshukumar0007/Link_vault.git
-   cd Link_vault
-   ```
-
-2. **Copy and configure environment variables**
-
-   ```bash
-   cp .env.example .env
-   # Edit .env with your database URL, Redis URL, and a strong SECRET_KEY
-   ```
-
-   Required variables:
-
-   | Variable | Example |
-   |----------|---------|
-   | `DATABASE_URL` | `postgresql+asyncpg://user:pass@localhost:5432/linkvault` |
-   | `REDIS_URL` | `redis://localhost:6379` |
-   | `SECRET_KEY` | 32+ character random string |
-   | `ALGORITHM` | `HS256` |
-   | `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` |
-   | `REFRESH_TOKEN_EXPIRE_DAYS` | `7` |
-   | `APP_ENV` | `development` |
-   | `DEBUG` | `true` |
-
-3. **Install dependencies**
-
-   ```bash
-   uv sync
-   ```
-
-4. **Run database migrations**
-
-   ```bash
-   uv run alembic upgrade head
-   ```
-
-5. **Start the API server**
-
-   ```bash
-   uv run uvicorn app.main:app --reload
-   ```
-
-6. **Start the Celery worker** (required for click analytics)
-
-   ```bash
-   uv run celery -A app.tasks.celery_app worker --loglevel=info
-   ```
-
-The API will be available at `http://localhost:8000`.
-Interactive docs at `http://localhost:8000/docs`.
+### Soft deletes with cache invalidation
+Links are never hard deleted. `is_active = False` is set first, then the Redis cache key is invalidated best-effort. DB is always the source of truth.
 
 ---
 
-## Docker Compose
+## Local Setup
 
-To start PostgreSQL, Redis, Prometheus, and Grafana locally:
+**Prerequisites:** Docker, uv (Python package manager)
 
 ```bash
+# Clone
+git clone https://github.com/Sudhanshukumar0007/Link_vault
+cd Link_vault
+
+# Install dependencies
+uv sync
+
+# Start infrastructure
 docker compose up -d
+
+# Copy env
+cp .env.example .env
+# Fill in .env values
+
+# Run migrations
+uv run alembic upgrade head
+
+# Start server
+uv run uvicorn app.main:app --reload
+
+# Start Celery worker (separate terminal)
+uv run celery -A app.tasks.celery_app.celery_app worker --loglevel=info
 ```
 
-Services:
-
-| Service | Port |
-|---------|------|
-| PostgreSQL | 5432 |
-| Redis | 6379 |
-| Prometheus | 9090 |
-| Grafana | 3000 (admin / admin) |
+Open http://localhost:8000/docs for Swagger UI.
 
 ---
 
 ## Running Tests
 
 ```bash
+# Create test DB
+psql -U postgres -h localhost -c "CREATE DATABASE linkvault_test;"
+
+# Run migrations on test DB
+DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/linkvault_test uv run alembic upgrade head
+
+# Run tests
 uv run pytest tests/ -v
 ```
 
-Tests use a dedicated test database and run with real PostgreSQL and Redis. Ensure both are running before executing the suite.
+**Test coverage:**
+- Auth: register, login, duplicate email, wrong password, refresh token, /me
+- Links: create, list, delete, slug collision, reserved slugs, unauthenticated
+- Redirect: valid slug, invalid slug
+- Workspaces: create, list, get, invite, remove, permission checks
 
 ---
 
-## Project Structure
+## Observability
 
-```
-app/
-├── api/
-│   └── v1/
-│       ├── auth.py          # Auth routes
-│       ├── links.py         # Link CRUD routes
-│       ├── redirect.py      # Redirect handler
-│       ├── analytics.py     # Analytics routes
-│       └── workspaces.py    # Workspace routes
-├── core/
-│   ├── config.py            # Settings (pydantic-settings)
-│   ├── redis.py             # Redis client
-│   ├── security.py          # JWT and password hashing
-│   └── utils.py             # Slug generation, reserved slugs
-├── db/
-│   └── session.py           # Async SQLAlchemy session
-├── middleware/
-│   ├── logging.py           # Request/response logging
-│   └── rate_limit.py        # IP-based rate limiting
-├── models/                  # SQLAlchemy ORM models
-├── schemas/                 # Pydantic request/response schemas
-├── services/                # Business logic layer
-├── tasks/
-│   ├── celery_app.py        # Celery app config
-│   └── analytics.py        # Click recording task
-└── main.py                  # App factory and lifespan
-alembic/
-└── versions/                # Database migrations
-monitoring/
-└── prometheus.yml           # Prometheus scrape config
-tests/                       # Pytest async test suite
+Start Prometheus + Grafana via Docker Compose:
+
+```bash
+docker compose up -d prometheus grafana
 ```
 
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000 (admin/admin)
+
+Dashboard panels:
+- Requests per second
+- p99 latency
+- 4xx error rate
+
 ---
 
-## Deployment
+## CI/CD
 
-The project includes a `render.yaml` for one-click deployment to [Render](https://render.com) and a `Dockerfile` for container-based deployments.
-
-Environment variables `DATABASE_URL`, `REDIS_URL`, and `SECRET_KEY` must be set in the deployment environment. `APP_ENV` should be set to `production` and `DEBUG` to `false`.
+Every push to `main`:
+1. GitHub Actions spins up PostgreSQL + Redis
+2. Runs full test suite (27 tests)
+3. If tests pass → Render auto-deploys
 
 ---
 
-## License
+**Implemented:**
+- ✅ JWT auth with refresh token rotation
+- ✅ Link CRUD with custom slugs, expiry, password protection
+- ✅ Redis cache-aside on hot redirect path
+- ✅ Celery click tracking (device, browser, referrer)
+- ✅ Analytics endpoints (daily series, device/browser/referrer breakdown)
+- ✅ Team workspaces with RBAC (owner/editor/viewer)
+- ✅ Sliding window rate limiting
+- ✅ Structured logging with request IDs
+- ✅ Prometheus metrics + Grafana dashboard
+- ✅ 27 passing tests
+- ✅ GitHub Actions CI/CD
 
-MIT
+---
+
+## Author
+
+**Sudhanshu Kumar** — B.Tech CSE (AI/ML), KIET Group of Institutions
+
+- GitHub: [@Sudhanshukumar0007](https://github.com/Sudhanshukumar0007)
+- Blog: [Backprop Diaries](https://backpropdiaries.hashnode.dev)
+
+> Built to learn production backend engineering — not just CRUD. Every decision in this codebase has a reason.

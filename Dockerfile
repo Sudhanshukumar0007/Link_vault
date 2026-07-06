@@ -15,4 +15,4 @@ RUN uv sync --frozen --no-dev
 COPY . .
 
 # Run migrations then start server
-CMD uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+CMD set -e && uv run alembic upgrade head && exec uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers
